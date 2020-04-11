@@ -51,10 +51,10 @@ module.exports = class {
         if (err) {
           return reject(err);
         }
-    
+
         try {
           const parsedBody = JSON.parse(body);
-    
+
           if (parsedBody.errors) {
             return reject(parsedBody.errors);
           }
@@ -124,7 +124,7 @@ module.exports = class {
       const hashtags = tweet.entities.hashtags;
 
       return hashtags.some(
-        (tag) => String(tag.text).toLowerCase() === hashtag
+        (tag) => String(tag.text).toLowerCase() === String(hashtag).toLowerCase()
       ) && userID === profileId;
     });
   }
@@ -145,7 +145,7 @@ module.exports = class {
     const hasHashtag = tweet
       .entities
       .hashtags
-      .some((tag) => String(tag.text).toLowerCase() === hashtag);
+      .some((tag) => String(tag.text).toLowerCase() === String(hashtag).toLowerCase());
 
     return {
       tweet,

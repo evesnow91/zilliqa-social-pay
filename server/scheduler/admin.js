@@ -1,20 +1,21 @@
 const debug = require('debug')('zilliqa-social-pay:scheduler:admins');
-const { Op } = require('sequelize');
 const zilliqa = require('../zilliqa');
 const models = require('../models');
 
 const Admin = models.sequelize.models.Admin;
 
-module.exports = async function() {
+module.exports = async function () {
   const statuses = new Admin().statuses;
   const admins = await zilliqa.getAdmins();
   const needUpdate = admins.map(async (adminAddress) => {
     const {
-      balance
+      balance,
+      nonce
     } = await zilliqa.getCurrentAccount(adminAddress);
 
     return Admin.update({
       balance,
+      nonce,
       status: statuses.enabled
     }, {
       where: {

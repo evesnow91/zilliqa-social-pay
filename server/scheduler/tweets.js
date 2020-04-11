@@ -27,7 +27,7 @@ function getPos(text, hashtag) {
   };
 }
 
-module.exports = async function() {
+module.exports = async function () {
   const statuses = new Admin().statuses;
   const freeAdmins = await Admin.count({
     where: {
@@ -76,6 +76,17 @@ module.exports = async function() {
     }
 
     try {
+      const registered = await zilliqa.getVerifiedTweets([tweet.idStr]);
+
+      if (registered && registered[tweet.idStr]) {
+        return await tweet.update({
+          approved: true,
+          claimed: true,
+          rejected: false,
+          block: 0
+        });
+      }
+
       const { text, startIndex } = getPos(tweet.text, blockchainInfo.hashtag);
       const tx = await zilliqa.verifyTweet({
         profileId: tweet.User.profileId,
@@ -89,6 +100,10 @@ module.exports = async function() {
       });
       debug('Tweet with ID', tweet.idStr, 'sent to shard.');
     } catch (err) {
+      if (err.message === 'Danger tweet.') {
+        await tweet.destroy();
+      }
+
       debug('tweet:', tweet.idStr, 'has not verifed error:', err);
     }
   });

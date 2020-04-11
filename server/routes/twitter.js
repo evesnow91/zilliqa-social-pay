@@ -73,7 +73,7 @@ router.post('/auth/twitter/reverse', async (req, res) => {
   }
 });
 
-router.post('/auth/twitter/callback', (req, res) => {
+router.get('/auth/twitter/callback', (req, res) => {
   return res.status(200).send('');
 });
 
@@ -153,7 +153,7 @@ router.post('/search/tweets/:query', checkSession, verifyJwt, async (req, res) =
       });
     } else if (tweet.user.id_str !== user.profileId) {
       return res.status(400).json({
-        message: 'User is not owner'
+        message: 'Wrong account'
       });
     } else if (foundTwittes) {
       return res.status(400).json({
@@ -167,6 +167,77 @@ router.post('/search/tweets/:query', checkSession, verifyJwt, async (req, res) =
   } catch (err) {
     return res.status(400).json({
       message: err.message || err
+    });
+  }
+});
+
+router.post('/add/tweet', checkSession, verifyJwt, async (req, res) => {
+  const { user } = req.verification;
+  const { id_str } = req.body;
+
+  if (!id_str) {
+    return res.status(401).json({
+      message: 'Invalid tweet data.'
+    });
+  }
+
+  const blockchainInfo = await Blockchain.findOne({
+    where: { contract: CONTRACT_ADDRESS }
+  });
+
+  try {
+    const twitter = new Twitter(user.token, user.tokenSecret, blockchainInfo);
+    const { tweet, hasHashtag } = await twitter.showTweet(id_str);
+    const foundTwittes = await Twittes.findOne({
+      where: { idStr: id_str },
+      attributes: [
+        'id',
+        'idStr'
+      ]
+    });
+
+    if (foundTwittes) {
+      return res.status(400).json({
+        message: 'Tweet already exists.'
+      });
+    } else if (!hasHashtag) {
+      return res.status(404).json({
+        message: `This tweet does not have the #${capitalizeFirstLetter(blockchain.hashtag)} hashtag in it.`
+      });
+    } else if (!user || user.profileId !== tweet.user.id_str) {
+      return res.status(401).json({
+        message: 'Invalid user data.'
+      });
+    } else if (!tweet.user || tweet.user.id_str !== user.profileId) {
+      return res.status(401).json({
+        message: 'Invalid user data.'
+      });
+    }
+
+    const createdTweet = await Twittes.create({
+      idStr: tweet.id_str,
+      text: tweet.full_text.toLowerCase(),
+      UserId: user.id,
+      block: blockchainInfo.BlockNum,
+      claimed: true
+    });
+
+    await user.update({
+      username: tweet.user.name,
+      screenName: tweet.user.screen_name,
+      profileImageUrl: tweet.user.profile_image_url
+    });
+
+    delete createdTweet.dataValues.text;
+    delete createdTweet.dataValues.updatedAt;
+
+    return res.status(201).json({
+      message: 'Added.',
+      tweet: createdTweet
+    });
+  } catch (err) {
+    return res.status(400).json({
+      message: err.message
     });
   }
 });

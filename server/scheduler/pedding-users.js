@@ -6,26 +6,9 @@ const { toBech32Address } = require('@zilliqa-js/crypto');
 
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
 const User = models.sequelize.models.User;
-const Admin = models.sequelize.models.Admin;
 const Blockchain = models.sequelize.models.blockchain;
 
-module.exports = async function() {
-  const statuses = new Admin().statuses;
-  const freeAdmins = await Admin.count({
-    where: {
-      status: statuses.enabled,
-      balance: {
-        [Op.gte]: '5000000000000' // 5ZILs
-      }
-    }
-  });
-
-  debug('Free admin addresses:', freeAdmins);
-
-  if (freeAdmins === 0) {
-    return null;
-  }
-
+module.exports = async function () {
   const users = await User.findAndCountAll({
     where: {
       synchronization: true,
@@ -34,7 +17,7 @@ module.exports = async function() {
       },
       updatedAt: {
         // Ten minuts.
-        [Op.lt]: new Date(new Date() - 24 * 60 * 400)
+        [Op.lt]: new Date(new Date() - 24 * 60 * 50)
       }
     },
     limit: 20
@@ -67,7 +50,7 @@ module.exports = async function() {
     return await user.update({
       synchronization: false,
       zilAddress: toBech32Address(usersFromContract[profileId]),
-      lastAction: Number(blockchainInfo.BlockNum)
+      lastAction: 0
     });
   });
 

@@ -36,24 +36,24 @@ export const FirstAboutPage: NextPage = () => {
   return (
     <React.Fragment>
       <AboutContainer>
-        <Illustration src={`/imgs/illustration-1.${browserState.format}`}/>
+        <Illustration src={`/imgs/illustration-1.${browserState.format}`} />
         <InfoContainer>
           <TitleText
             fontColors={FontColors.white}
             fontVariant={Fonts.AvenirNextLTProBold}
           >
-            SocialPay.
+            SocialPay
           </TitleText>
           <DescriptionText
             fontColors={FontColors.white}
-            fontVariant={Fonts.AvenirNextLTProDemi}
+            fontVariant={Fonts.AvenirNextLTProRegular}
             size={FontSize.md}
           >
             <p>
               SocialPay is an innovative new solution that allows you to earn <Span>$ZIL</Span> by sharing social media updates on Twitter.
             </p>
             <p>
-              To use SocialPay you need to login with your Twitter account and use a <Span>#Zilliqa</Span> related hashtag in your tweet.
+              To use SocialPay you need to login with your Twitter account and use the campaign hashtag in your tweet.
             </p>
           </DescriptionText>
           <Button
@@ -61,7 +61,7 @@ export const FirstAboutPage: NextPage = () => {
             variant={ButtonVariants.outlet}
             onClick={handleNext}
           >
-            NEXT
+            CONTINUE
           </Button>
         </InfoContainer>
       </AboutContainer>

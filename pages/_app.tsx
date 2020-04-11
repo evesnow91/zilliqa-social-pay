@@ -6,13 +6,14 @@ import App from 'next/app';
 
 import UserStore from 'store/user';
 import BrowserStore from 'store/browser';
+import EventStore from 'store/event';
 
 import { Container } from 'components/container';
 import { FixedWrapper } from 'components/fixed-wrapper';
 
-import { Fonts, ImgFormats } from 'config';
+import { ImgFormats, Fonts } from 'config';
 import { authGuard } from 'utils/guard';
-import { canUseWebP } from 'utils/webp-support';
+import { supportsWebp } from 'utils/webp-support';
 
 const GlobalStyle = createGlobalStyle`
   @font-face {
@@ -51,6 +52,28 @@ const GlobalStyle = createGlobalStyle`
     box-sizing: border-box;
   }
 
+  button {
+    cursor: pointer;
+    border-radius: 20px;
+    width: 150px;
+
+    background: transparent;
+    border: 1px solid #fff;
+    color: #fff;
+    padding: 10px;
+    letter-spacing: 1px;
+
+    transition: all 0.5s ease-out;
+
+    font-family: ${Fonts.AvenirNextLTProRegular};
+
+    :hover {
+      background: #fff;
+      color: #5C63EF;
+      border: 1px solid transparent;
+    }
+  }
+
   @keyframes fadeInUp {
     from {
       transform: translate3d(0, 100%, 0);
@@ -80,42 +103,123 @@ const GlobalStyle = createGlobalStyle`
   .rc-steps-label-vertical .rc-steps-item-description {
     text-align: center;
   }
+  .ReactModal__Overlay {
+    z-index: 99;
+    perspective: 600;
+    opacity: 0;
+  }
+
+  .ReactModal__Overlay--after-open {
+    opacity: 1;
+    transition: opacity 150ms ease-out;
+  }
+
+  .ReactModal__Content {
+    transform: scale(0.5) rotateX(-30deg);
+  }
+
+  .ReactModal__Content--after-open {
+    transform: scale(1) rotateX(0deg);
+    transition: all 150ms ease-in;
+  }
+
+  .ReactModal__Overlay--before-close {
+    opacity: 0;
+  }
+
+  .ReactModal__Content--before-close {
+    transform: scale(0.5) rotateX(30deg);
+    transition: all 150ms ease-in;
+  }
+
+  .ReactModal__Body--open,
+  .ReactModal__Html--open {
+    overflow: hidden;
+  }
+
+  .pagination.desktop {
+    min-width: 500px;
+  }
+  .pagination.mobile {
+    min-width: 300px;
+  }
+
+  .pagination {
+    display: flex;
+
+    margin: 0;
+    padding: 0;
+    padding-left: 40px;
+    margin-bottom: 15px;
+
+    li {
+      list-style-type: none;
+      margin-left: 10px;
+
+      a {
+        cursor: pointer;
+        min-width: 100px;
+        border-radius: 30px;
+        background: transparent;
+        border: 1px solid #fff;
+        color: #fff;
+        transition: all 0.5s ease-out;
+        padding: 9px 12px 9px 12px;
+
+        :hover {
+          background: #fff;
+          color: #5C63EF;
+          border: 1px solid transparent;
+        }
+      }
+    }
+
+    li.active {
+      a {
+        background: #fff;
+        color: #5C63EF;
+        border: 1px solid transparent;
+      }
+    }
+
+    li.disabled > a {
+      cursor: unset;
+      :hover {
+        background: transparent;
+        color: #fff;
+        border: 1px solid #fff;
+      }
+    }
+
+    @media (max-width: 440px) {
+      padding: 0;
+    }
+  }
 `;
 
 class SocialPay extends App {
 
   public componentDidMount() {
-    const isWebp = canUseWebP();
-
-    if (!isWebp) {
-      BrowserStore.setformat(ImgFormats.png);
-    }
-
-    if (this.props.router.route.includes('auth')) {
-      return null;
-    } else if (this.props.router.route.includes('about')) {
-      return null;
-    }
+    supportsWebp()
+      .then((isWebp) => isWebp ? null : BrowserStore.setformat(ImgFormats.png));
 
     if (typeof window !== 'undefined') {
-      UserStore.update();
+      UserStore.getJWT();
 
-      const state = UserStore.store.getState();
+      const userState = UserStore.store.getState();
 
-      if (!state || !state.jwtToken || state.message === 'Unauthorized') {
+      if (!userState.jwtToken || !this.props.pageProps.user) {
         UserStore.clear();
-
-        this.props.router.push('/auth');
-      }
-    }
-
-    if (!this.props.pageProps.user) {
-      window.localStorage.clear();
-
-      if (this.props.pageProps.firstStart) {
+        EventStore.signOut(null);
         this.props.router.push('/about');
-      } else {
-        this.props.router.push('/auth');
+      } else if (this.props.pageProps.user) {
+        UserStore.setUser(this.props.pageProps.user);
+      }
+
+      if (this.props.router.route.includes('about')) {
+        return null;
+      } else if (this.props.router.route.includes('auth')) {
+        return null;
       }
     }
   }

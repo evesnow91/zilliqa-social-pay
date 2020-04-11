@@ -9,26 +9,42 @@ import UserStore from 'store/user';
 import TwitterStore from 'store/twitter';
 
 import { Text } from 'components/text';
-import { Search } from 'components/Input';
-import { Button } from 'components/button';
+import { ProgressCircle } from 'components/progress-circle';
 import { AroundedContainer } from 'components/rounded-container';
 import { Img } from 'components/img';
+import { Input, InputIcons } from 'components/Input';
+import { Button } from 'components/button';
+import { Container } from 'components/container';
 
 import {
   FontSize,
   Fonts,
-  SizeComponent,
   Events,
-  FontColors
+  FontColors,
+  SizeComponent,
+  ButtonVariants
 } from 'config';
 import { fromZil } from 'utils/from-zil';
 import { timerCalc } from 'utils/timer';
 import { SearchTweet } from 'utils/get-tweets';
 
 const ControlContainer = styled(AroundedContainer)`
-  padding-left: 15px;
-  padding-right: 15px;
+  padding: 30px;
+  margin-bottom: 30px;
   align-items: flex-start;
+
+  @media (max-width: 440px) {
+    margin-bottom: 30px;
+  }
+`;
+const DashboardContainer = styled(Container)`
+  position: absolute;
+  transform: translate(150%, -125%);
+
+  @media (max-width: 440px) {
+    position: relative;
+    transform: none;
+  }
 `;
 
 /**
@@ -43,8 +59,10 @@ export const Controller: React.FC = () => {
   const userState = Effector.useStore(UserStore.store);
   const twitterState = Effector.useStore(TwitterStore.store);
 
-  // Search value.
-  const [searchValue, setSearchValue] = React.useState<string | null>(null);
+  const [value, setValue] = React.useState<string>('');
+  const [placeholder, setPlaceholder] = React.useState<string>();
+  const [disabled, setDisabled] = React.useState<boolean>();
+  const [icon, setIcon] = React.useState<InputIcons>(InputIcons.timer);
 
   /**
    * Calculate the time for next action.
@@ -53,10 +71,10 @@ export const Controller: React.FC = () => {
     () => timerCalc(
       blockchainState,
       userState,
-      twitterState.tweets,
+      twitterState.lastBlockNumber,
       Number(blockchainState.blocksPerDay)
     ),
-    [blockchainState, twitterState]
+    [blockchainState, twitterState, userState]
   );
 
   /**
@@ -65,23 +83,23 @@ export const Controller: React.FC = () => {
    */
   const handleInput = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.value) {
-      setSearchValue(null);
+      setValue('');
       return null;
     }
 
-    let { value } = event.target;
+    let inputValue = event.target.value;
 
     // If user pass tweet ID.
-    if (!isNaN(Number(value))) {
-      setSearchValue(value);
+    if (!isNaN(Number(inputValue))) {
+      setValue(inputValue);
 
       return null;
     }
 
-    value = value.replace(/\?.*/gm, '');
+    inputValue = inputValue.replace(/\?.*/gm, '');
 
     // Parse and search tweet ID.
-    const foundTweetId = value
+    const foundTweetId = inputValue
       .split('/')
       .filter(Boolean)
       .find((el) => Number.isInteger(Number(el)));
@@ -90,9 +108,9 @@ export const Controller: React.FC = () => {
       return null;
     }
 
-    // If value is valid than update `searchValue` state.
-    setSearchValue(foundTweetId);
-  }, [setSearchValue, searchValue]);
+    // If value is valid than update `value` state.
+    setValue(foundTweetId);
+  }, [setValue]);
   /**
    * Handle when form has been submited and send tweet ID to server.
    * @param event - HTMLForm event.
@@ -100,14 +118,16 @@ export const Controller: React.FC = () => {
   const handleSearch = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!searchValue) {
+    console.log(value);
+
+    if (!value) {
       return null;
     }
 
     EventStore.setEvent(Events.Load);
-    // Send to server tweet ID (`searchValue`).
+    // Send to server tweet ID (`value`).
     const tweet = await SearchTweet(
-      searchValue,
+      value,
       userState.jwtToken
     );
     EventStore.reset();
@@ -122,7 +142,32 @@ export const Controller: React.FC = () => {
     }
 
     EventStore.setEvent(Events.Twitter);
-  } , [searchValue, userState]);
+  }, [value, userState]);
+
+  React.useEffect(() => {
+    if (userState.synchronization) {
+      setPlaceholder('Waiting for address to sync...');
+      setDisabled(true);
+      setIcon(InputIcons.refresh);
+    } else if (timerDay > 0) {
+      setPlaceholder(`You can participate: ${moment(timerDay).fromNow()}`);
+      setDisabled(true);
+      setIcon(InputIcons.timer);
+    } else if (timerDay === 0 && !userState.synchronization) {
+      setDisabled(false);
+      setPlaceholder('Paste your tweet link here');
+      setIcon(InputIcons.search);
+    }
+  }, [
+    setIcon,
+    setDisabled,
+    disabled,
+    setPlaceholder,
+    value,
+    userState,
+    timerDay
+  ]);
+
   /**
    * Handle click to reload icon.
    * Just update user information.
@@ -135,64 +180,91 @@ export const Controller: React.FC = () => {
 
   return (
     <ControlContainer onSubmit={handleSearch}>
-      <Text
-        size={FontSize.sm}
-        fontVariant={Fonts.AvenirNextLTProDemi}
-        fontColors={FontColors.white}
-      >
-        ZIL per tweet: {fromZil(blockchainState.zilsPerTweet)} ZIL
-      </Text>
-      <Text
-        size={FontSize.sm}
-        fontVariant={Fonts.AvenirNextLTProDemi}
-        fontColors={FontColors.white}
-      >
-        Balance: {fromZil(userState.balance)} ZIL <Img
-          src="/icons/refresh.svg"
-          css="cursor: pointer;"
-          onClick={handleUpdateUser}
+      <DashboardContainer>
+        <ProgressCircle
+          pct={twitterState.verifiedCount}
+          count={twitterState.count}
         />
+        <Text
+          size={FontSize.sm}
+          fontColors={FontColors.white}
+        >
+          Verified tweets
+        </Text>
+      </DashboardContainer>
+      <Text
+        size={FontSize.md}
+        fontVariant={Fonts.AvenirNextLTProRegular}
+        fontColors={FontColors.white}
+      >
+        Dashboard
       </Text>
       <Text
-        size={FontSize.sm}
-        fontVariant={Fonts.AvenirNextLTProDemi}
-        fontColors={FontColors.white}
-        css="text-transform: capitalize;"
+        size={FontSize.xs}
+        fontVariant={Fonts.AvenirNextLTProRegular}
+        fontColors={FontColors.gray}
       >
-        Hashtag: {blockchainState.hashtag}
+        BALANCE
+        <Text
+          fontVariant={Fonts.AvenirNextLTProBold}
+          fontColors={FontColors.white}
+          css="font-size: 15px;"
+        >
+          {fromZil(userState.balance)} ZIL <Img
+            src="/icons/refresh.svg"
+            css="cursor: pointer;font-size: 15px;"
+            onClick={handleUpdateUser}
+          />
+        </Text>
       </Text>
-      <Search
+      <Text
+        size={FontSize.xs}
+        fontVariant={Fonts.AvenirNextLTProRegular}
+        fontColors={FontColors.gray}
+      >
+        $ZIL PER TWEET
+        <Text
+          fontVariant={Fonts.AvenirNextLTProBold}
+          fontColors={FontColors.white}
+          css="font-size: 15px;"
+        >
+          {fromZil(blockchainState.zilsPerTweet)} $ZIL
+        </Text>
+      </Text>
+      <Text
+        size={FontSize.xs}
+        fontVariant={Fonts.AvenirNextLTProRegular}
+        fontColors={FontColors.gray}
+      >
+        HASHTAG
+        <Text
+          fontVariant={Fonts.AvenirNextLTProBold}
+          fontColors={FontColors.white}
+          css="text-transform: capitalize;font-size: 15px;"
+        >
+          {blockchainState.hashtag}
+        </Text>
+      </Text>
+      <Input
         sizeVariant={SizeComponent.md}
-        disabled={timerDay !== 0}
-        css="margin-top: 30px;"
-        placeholder="Paste your Tweet link here"
+        defaultValue={value}
+        icon={icon}
+        disabled={disabled}
         onChange={handleInput}
+        placeholder={placeholder}
+        css="font-size: 12px;height: 40px;"
       />
-      {timerDay === 0 && !userState.synchronization ? (
+      {!disabled ? (
         <Button
-          sizeVariant={SizeComponent.lg}
-          disabled={Boolean(!searchValue)}
+          sizeVariant={SizeComponent.md}
+          variant={ButtonVariants.outlet}
           css="margin-top: 10px;"
         >
-          Search Tweet
+          Search
         </Button>
-      ) : userState.synchronization ? (
-        <Text
-          size={FontSize.sm}
-          fontVariant={Fonts.AvenirNextLTProDemi}
-          fontColors={FontColors.white}
-        >
-          Waiting for address to sync...
-        </Text>
-      ) : (
-        <Text
-          size={FontSize.sm}
-          fontVariant={Fonts.AvenirNextLTProDemi}
-          fontColors={FontColors.white}
-        >
-          You can participate: {moment(timerDay).fromNow()}
-        </Text>
-      )}
+      ) : null}
     </ControlContainer>
   );
 };
+
+export default Controller;

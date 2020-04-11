@@ -3,7 +3,7 @@ require('dotenv').config();
 const { Op } = require('sequelize');
 const { Zilliqa } = require('@zilliqa-js/zilliqa');
 const { RPCMethod } = require('@zilliqa-js/core');
-const { StatusType, MessageType } = require('@zilliqa-js/subscriptions');
+const { StatusType, MessageType, SocketState } = require('@zilliqa-js/subscriptions');
 const { Account } = require('@zilliqa-js/account');
 const { validation, BN, Long, bytes, units } = require('@zilliqa-js/util');
 const {
@@ -64,17 +64,17 @@ module.exports = {
   async getVerifiedTweets(tweetIds) {
     const zilliqa = new Zilliqa(httpNode);
     const contract = zilliqa.contracts.at(CONTRACT_ADDRESS);
-  
+
     try {
       const result = await contract.getSubState(
         'verified_tweets',
         tweetIds
       );
-  
+
       if (result.verified_tweets) {
         return result.verified_tweets
       }
-  
+
       return result
     } catch (err) {
       return null;
@@ -93,7 +93,7 @@ module.exports = {
       },
       order: [
         ['balance', 'DESC'],
-        ['updatedAt', 'DESC']
+        ['nonce', 'ASC']
       ]
     });
 
@@ -155,7 +155,7 @@ module.exports = {
 
     const { _eventname, params } = tx.receipt.event_logs.find(
       (e) => (e._eventname === eventUtils.events.ConfiguredUserAddress) ||
-      (e._eventname === eventUtils.events.Error)
+        (e._eventname === eventUtils.events.Error)
     );
 
     switch (_eventname) {
@@ -349,18 +349,36 @@ module.exports = {
   },
   async blockSubscribe(cb) {
     const zilliqa = new Zilliqa(httpNode);
-  
+
     const subscriber = zilliqa.subscriptionBuilder.buildNewBlockSubscriptions(
       wsNode
     );
 
-    subscriber.emitter.on(MessageType.NEW_BLOCK, (event) => {
-      cb(event.value.TxBlock.header)
+    subscriber.emitter.on(StatusType.SUBSCRIBE_NEW_BLOCK, (event) => {
+      console.log('get SubscribeNewBlock echo: ', event);
     });
 
-    await subscriber.start();
+    subscriber.emitter.on(SocketState.SOCKET_ERROR, (event) => {
+      console.log('SOCKET_ERROR echo: ', event);
+    });
+    subscriber.emitter.on(SocketState.SOCKET_CLOSE, (event) => {
+      console.log('SOCKET_CLOSE echo: ', event);
+    });
+    subscriber.emitter.on(SocketState.SOCKET_CONNECT, (event) => {
+      console.log('SOCKET_CONNECT echo: ', event);
+    });
+    subscriber.emitter.on(SocketState.SOCKET_MESSAGE, (event) => {
+      console.log('SOCKET_MESSAGE echo: ', event);
+    });
+    subscriber.emitter.on(SocketState.SOCKET_READY, (event) => {
+      console.log('SOCKET_READY echo: ', event);
+    });
 
-    return subscriber;
+    subscriber.emitter.on(MessageType.NEW_BLOCK, (event) => {
+      cb(event.value.TxBlock.header);
+    });
+
+    return await subscriber.start();
   },
   async eventSubscribe(cb, subscribed = () => null) {
     const zilliqa = new Zilliqa(httpNode);
@@ -372,11 +390,11 @@ module.exports = {
         ]
       }
     );
-    
+
     subscriber.emitter.on(StatusType.SUBSCRIBE_EVENT_LOG, (event) => {
       subscribed(event);
     });
-    
+
     subscriber.emitter.on(MessageType.EVENT_LOG, (event) => {
       if (!event || !event.value || !event.value[0]) {
         return null;

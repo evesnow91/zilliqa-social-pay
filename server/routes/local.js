@@ -15,15 +15,26 @@ const actions = new User().actions;
 
 router.put('/update/address/:address', checkSession, verifyJwt, async (req, res) => {
   const bech32Address = req.params.address;
-  const { user, decoded } = req.verification;
-
-  if (!validation.isBech32(bech32Address)) {
-    return res.status(401).json({
-      message: 'Invalid address format.'
-    });
-  }
+  const { user } = req.verification;
 
   try {
+    if (!validation.isBech32(bech32Address)) {
+      return res.status(401).json({
+        message: 'Invalid address format.'
+      });
+    }
+    const userExist = await User.count({
+      where: {
+        zilAddress: bech32Address
+      }
+    });
+
+    if (userExist > 0) {
+      return res.status(401).json({
+        message: 'Such address is already registered.'
+      });
+    }
+
     const blockchainInfo = await Blockchain.findOne({
       where: { contract: CONTRACT_ADDRESS }
     });
@@ -41,9 +52,11 @@ router.put('/update/address/:address', checkSession, verifyJwt, async (req, res)
       lastAction: block
     });
 
+    delete user.dataValues.tokenSecret;
+    delete user.dataValues.token;
+
     return res.status(201).json({
-      ...decoded,
-      zilAddress: bech32Address,
+      user,
       message: 'ConfiguredUserAddress',
     });
   } catch (err) {
@@ -67,6 +80,16 @@ router.put('/claim/tweet', checkSession, verifyJwt, async (req, res) => {
   const { user } = req.verification;
   const tweet = req.body;
   let foundTweet = null;
+
+  if (!user.zilAddress) {
+    return res.status(401).json({
+      message: 'need to sync zilAddress.'
+    });
+  } else if (user.synchronization) {
+    return res.status(401).json({
+      message: 'User zilAddress is not synchronized.'
+    });
+  }
 
   try {
     foundTweet = await Twittes.findOne({
@@ -117,71 +140,42 @@ router.put('/claim/tweet', checkSession, verifyJwt, async (req, res) => {
   return res.status(201).json(foundTweet);
 });
 
-router.post('/add/tweet', checkSession, verifyJwt, async (req, res) => {
-  const { user, decoded } = req.verification;
-  const tweet = req.body;
-
-  if (!tweet || !tweet.full_text) {
-    return res.status(401).json({
-      message: 'Invalid tweet data.'
-    });
-  }
-
-  try {
-    if (!user || user.profileId !== tweet.user.id_str) {
-      return res.status(401).json({
-        message: 'Invalid user data.'
-      });
-    } else if (!tweet.user || tweet.user.id_str !== user.profileId) {
-      return res.status(401).json({
-        message: 'Invalid user data.'
-      });
-    }
-
-    const blockchainInfo = await Blockchain.findOne({
-      where: { contract: CONTRACT_ADDRESS }
-    });
-
-    await Twittes.create({
-      idStr: tweet.id_str,
-      text: tweet.full_text.toLowerCase(),
-      UserId: user.id,
-      block: blockchainInfo.BlockNum
-    });
-
-    await user.update({
-      username: tweet.user.name,
-      screenName: tweet.user.screen_name,
-      profileImageUrl: tweet.user.profile_image_url
-    });
-
-    return res.status(201).json({
-      message: 'Added.'
-    });
-  } catch (err) {
-    return res.status(400).json({
-      message: err.message
-    });
-  }
-});
-
 router.get('/get/tweets', checkSession, async (req, res) => {
-  const userId = req.session.passport.user.id;
+  const UserId = req.session.passport.user.id;
+  const limit = req.query.limit || 3;
+  const offset = req.query.offset || 0;
 
   try {
-    const user = await User.findByPk(userId);
-
-    if (!user) {
-      res.clearCookie(process.env.SESSION);
-      res.clearCookie(`${process.env.SESSION}.sig`);
-      res.clearCookie('io');
-
-      throw new Error('No found user.');
-    }
-
-    const twittes = await Twittes.findAll({
+    const count = await Twittes.count({
       where: {
-        UserId: user.id
+        UserId
+      }
+    });
+    const verifiedCount = await Twittes.count({
+      where: {
+        UserId,
+        approved: true
+      }
+    });
+    const lastActionTweet = await Twittes.findOne({
+      order: [
+        ['block', 'DESC']
+      ],
+      where: {
+        UserId
+      },
+      attributes: [
+        'block'
+      ]
+    });
+    const tweets = await Twittes.findAll({
+      limit,
+      offset,
+      order: [
+        ['createdAt', 'DESC']
+      ],
+      where: {
+        UserId
       },
       attributes: {
         exclude: [
@@ -191,7 +185,12 @@ router.get('/get/tweets', checkSession, async (req, res) => {
       }
     });
 
-    return res.status(200).json(twittes);
+    return res.status(200).json({
+      tweets,
+      count,
+      verifiedCount,
+      lastBlockNumber: !lastActionTweet ? 0 : lastActionTweet.block
+    });
   } catch (err) {
     return res.status(400).json({
       message: err.message

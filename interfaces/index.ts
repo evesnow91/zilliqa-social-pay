@@ -36,18 +36,9 @@ export interface Twitte {
   rejected: boolean;
   claimed: boolean;
   txId: string;
-  block?: string | number;
+  block: string | number;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface Contract {
-  contract: string;
-  owner: string;
-  hashtag: string | null;
-  zilsPerTweet: string;
-  blocksPerDay: string;
-  blocksPerWeek: string;
 }
 
 export interface Blockchain {
@@ -59,6 +50,8 @@ export interface Blockchain {
   BlockNum: string | number;
   DSBlockNum: string | number;
   rate: string | number;
+  balance: string | number;
+  initBalance: string | number;
   message?: string;
 }
 
@@ -70,4 +63,10 @@ export interface PageProp {
 export interface EventState {
   current: Events;
   content: null | any;
+}
+
+export interface FetchTweets {
+  tweets: Twitte[];
+  count: number;
+  verifiedCount: number;
 }

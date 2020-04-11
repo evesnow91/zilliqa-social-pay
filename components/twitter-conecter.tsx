@@ -12,35 +12,28 @@ import {
   FontColors,
   Fonts,
   FontSize,
-  Sides,
-  APIs,
-  Events
+  APIs
 } from 'config';
 
-const TwitterLoginStyles = {
-  cursor: 'pointer',
-  borderRadius: '20px',
-  width: '150px',
-
-  background: 'transparent',
-  border: `1px solid ${FontColors.white}`,
-  padding: '10px'
-};
 type Prop = {
   show?: boolean;
+  connected: () => void;
 };
 
 /**
  * Form for oauth with twitter.
  * @prop show - Show or hidden component.
  */
-export const TwitterConnect: React.FC<Prop> = ({ show }) => {
+export const TwitterConnect: React.FC<Prop> = ({ show, connected }) => {
   const handleSuccess = React.useCallback(async (res: any) => {
     const userData = await res.json();
 
     UserStore.setUser(userData);
+    UserStore.setJWT(userData.jwtToken);
+
+    connected();
     EventStore.reset();
-  }, [UserStore, EventStore]);
+  }, [UserStore, EventStore, connected]);
 
   return (
     <AroundedContainer style={{ display: show ? 'flex' : 'none' }}>
@@ -50,27 +43,19 @@ export const TwitterConnect: React.FC<Prop> = ({ show }) => {
         fontVariant={Fonts.AvenirNextLTProDemi}
         size={FontSize.md}
       >
-        Sign in Twitter
+        Sign In by Twitter
       </Text>
       <TwitterLogin
-        style={TwitterLoginStyles}
         loginUrl={APIs.twitterAuth}
         requestTokenUrl={APIs.twitterAuthReverse}
         onSuccess={handleSuccess}
         onFailure={() => EventStore.reset()}
         showIcon
       >
-        <Text
-          align={Sides.center}
-          fontColors={FontColors.white}
-          fontVariant={Fonts.AvenirNextLTProDemi}
-          size={FontSize.sm}
-          css="margin: 0;"
-          onClick={() => EventStore.setEvent(Events.Load)}
-        >
-          Connect
-        </Text>
+        CONNECT
       </TwitterLogin>
     </AroundedContainer>
   );
 };
+
+export default TwitterConnect;

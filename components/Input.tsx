@@ -3,11 +3,18 @@ import styled from 'styled-components';
 
 import { SizeComponent, Fonts, FontColors, ButtonVariants } from 'config';
 
+export enum InputIcons {
+  search = 'background: #5C63EF url(/icons/search-icon.svg) no-repeat 90% center;',
+  refresh = 'background: #5C63EF url(/icons/refresh.svg) no-repeat 90% center;',
+  timer = 'background: #5C63EF url(/icons/timer.svg) no-repeat 90% center;'
+}
+
 type Prop = {
   sizeVariant?: SizeComponent;
   fontVariant?: Fonts | string;
   variants?: ButtonVariants;
   css?: string;
+  icon?: InputIcons;
 };
 
 /**
@@ -26,30 +33,32 @@ export const Input = styled.input`
   text-align: inherit;
   font-size: inherit;
   resize: none;
-  text-indent: 15px;
+  text-indent: 5px;
 
   padding: ${(props: Prop) => props.sizeVariant};
 
   width: 100%;
   border: 0;
+  border: 1px solid ${FontColors.gray};
 
-  border-radius: 35px;
+  border-radius: 10px;
   ${(props: Prop) => props.variants}
 
   transition: all .5s ease-out;
 
+  ${(props: Prop) => props.icon}
   ${(props: Prop) => props.css}
 
   :focus {
     outline: none;
   }
   :disabled {
-    opacity: 0.5;
     cursor: unset;
   }
   ::placeholder {
     color: ${FontColors.white};
-    opacity: 0.6;
+    // opacity: 0.9;
+    font-size: 10px;
   }
 
   @media (max-width: 370px) {

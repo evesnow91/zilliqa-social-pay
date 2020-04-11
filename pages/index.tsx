@@ -1,5 +1,6 @@
 import React from 'react';
 import { NextPage } from 'next';
+import dynamic from 'next/dynamic';
 import styled from 'styled-components';
 import * as Effector from 'effector-react';
 import { useRouter } from 'next/router';
@@ -9,16 +10,18 @@ import UserStore from 'store/user';
 import TwitterStore from 'store/twitter';
 import BlockchainStore from 'store/blockchain';
 import EventStore from 'store/event';
+import BrowserStore from 'store/browser';
 
 import { Container } from 'components/container';
-import { TopBar } from 'components/top-bar';
 import { Img } from 'components/img';
-import { Verified } from 'components/verified';
-import { Controller } from 'components/controller';
 
 import { socket } from 'utils/socket';
 import { PageProp } from 'interfaces';
 import { Events } from 'config';
+
+const TopBar = dynamic(() => import('components/top-bar'));
+const Verified = dynamic(() => import('components/verified'));
+const Controller = dynamic(() => import('components/controller'));
 
 const MainPageContainer = styled.main`
   display: grid;
@@ -38,7 +41,8 @@ const DashboardContainer = styled(Container)`
   justify-content: space-around;
   align-items: flex-end;
   width: 100%;
-  max-width: 900px;
+  max-width: 1024px;
+  max-hight: 100vh;
   z-index: 1;
 
   padding-top: 5%;
@@ -55,42 +59,42 @@ const Illustration = styled(Img)`
 
 const updater = async () => {
   const messageError = 'Unauthorized';
+  const blockchain = await BlockchainStore.updateBlockchain(null);
+
   const user = await UserStore.updateUserState(null);
 
   if (user && user.message && user.message === messageError) {
     throw new Error(messageError);
   }
 
-  const blockchain = await BlockchainStore.updateBlockchain(null);
-
   if (blockchain && blockchain.message && blockchain.message === messageError) {
     throw new Error(messageError);
   }
 
-  const tweets = await TwitterStore.getTweets(null);
+  const tweetsResult = await TwitterStore.getTweets({});
 
-  if (tweets.message && tweets.message === messageError) {
+  if (tweetsResult.message && tweetsResult.message === messageError) {
     throw new Error(messageError);
-  } else if (!tweets || tweets.length < 1) {
+  } else if (!tweetsResult.tweets || tweetsResult.tweets.length < 1) {
     const userState = UserStore.store.getState();
 
     await TwitterStore.updateTweets(userState.jwtToken);
   }
 };
 
-export const MainPage: NextPage<PageProp> = () => {
+export const MainPage: NextPage<PageProp> = (props) => {
   const isTabletOrMobile = useMediaQuery({ query: '(max-width: 446px)' });
   const router = useRouter();
 
   const blockchainState = Effector.useStore(BlockchainStore.store);
   const userState = Effector.useStore(UserStore.store);
+  const browserState = Effector.useStore(BrowserStore.store);
 
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
     if (!mounted) {
       setMounted(true);
-
       EventStore.setEvent(Events.Load);
 
       updater()
@@ -100,7 +104,10 @@ export const MainPage: NextPage<PageProp> = () => {
         })
         .catch(() => {
           EventStore.reset();
-          router.push('/auth');
+          EventStore.signOut(null);
+          UserStore.clear();
+
+          router.push('/about');
         });
     }
   }, [
@@ -108,7 +115,8 @@ export const MainPage: NextPage<PageProp> = () => {
     setMounted,
     blockchainState,
     userState,
-    router
+    router,
+    props
   ]);
 
   return (
@@ -119,7 +127,7 @@ export const MainPage: NextPage<PageProp> = () => {
         <Controller />
       </DashboardContainer>
       {!isTabletOrMobile ? (
-        <Illustration src="/imgs/illustration-4.svg"/>
+        <Illustration src={`/imgs/illustration-4.${browserState.format}`} />
       ) : null}
     </MainPageContainer>
   );

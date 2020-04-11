@@ -1,5 +1,6 @@
 import React from 'react';
 import { NextPage } from 'next';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import styled from 'styled-components';
 import { useMediaQuery } from 'react-responsive';
@@ -8,10 +9,11 @@ import * as Effector from 'effector-react';
 import UserStore from 'store/user';
 import BrowserStore from 'store/browser';
 
-import { TwitterConnect } from 'components/twitter-conecter';
 import { Container } from 'components/container';
-import { ZilliqaConnect } from 'components/zilliqa-connect';
 import { Img } from 'components/img';
+
+const ZilliqaConnect = dynamic(() => import('components/zilliqa-connect'));
+const TwitterConnect = dynamic(() => import('components/twitter-conecter'));
 
 const AuthContainer = styled(Container)`
   display: flex;
@@ -49,6 +51,12 @@ export const AuthPage: NextPage = () => {
   const userState = Effector.useStore(UserStore.store);
   const browserState = Effector.useStore(BrowserStore.store);
 
+  const handleConnected = React.useCallback(() => {
+    if (userState.jwtToken && userState.zilAddress) {
+      router.push('/');
+    }
+  }, [userState, router]);
+
   const backgroundImg = React.useMemo(() => {
     if (isTabletOrMobile) {
       return `imgs/illustration-3-mobile.${browserState.format}`;
@@ -65,15 +73,21 @@ export const AuthPage: NextPage = () => {
         router.push('/');
       }
     }
-  }, [userState]);
+  }, [userState, router]);
 
   return (
     <React.Fragment>
       <AuthContainer>
-        <TwitterConnect show={Boolean(!userState.jwtToken)}/>
-        <ZilliqaConnect show={Boolean(!userState.zilAddress && userState.jwtToken)}/>
+        <TwitterConnect
+          show={Boolean(!userState.jwtToken)}
+          connected={handleConnected}
+        />
+        <ZilliqaConnect
+          show={Boolean(!userState.zilAddress && userState.jwtToken)}
+          connected={handleConnected}
+        />
       </AuthContainer>
-      <Background src={backgroundImg}/>
+      <Background src={backgroundImg} />
     </React.Fragment>
   );
 };

@@ -27,7 +27,7 @@ export function socket() {
     const user = JSON.parse(data) as User;
 
     if (user.profileId === userSate.profileId) {
-      if (user.synchronization !== userSate.synchronization) {
+      if (user.synchronization === false && userSate.synchronization === true) {
         NotificationManager.success('Address configured');
       }
 
@@ -51,6 +51,7 @@ export function socket() {
 
     if (tweet.approved) {
       NotificationManager.success('Your tweet is confirmed.');
+      UserStore.updateUserState(null);
     } else if (tweet.rejected) {
       NotificationManager.success('Your tweet is rejected.');
     }

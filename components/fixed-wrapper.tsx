@@ -10,10 +10,11 @@ import { NotificationContainer, NotificationManager } from 'react-notifications'
 import EventStore from 'store/event';
 import UserStore from 'store/user';
 import TwitterStore from 'store/twitter';
+import BrowserStore from 'store/browser';
 import BlockchainStore from 'store/blockchain';
 
 import { Modal } from 'components/modal';
-import { Card } from 'components/card';
+import { Img } from 'components/img';
 import { FieldInput } from 'components/Input';
 import { Text } from 'components/text';
 import { Button } from 'components/button';
@@ -35,6 +36,7 @@ import { addTweet } from 'utils/update-tweets';
 const SPINER_SIZE = 150;
 const WIDTH_MOBILE = 250;
 const WIDTH_DEFAULT = 450;
+const SLEEP = 10;
 
 /**
  * Container for modals and any componets with fixed postion.
@@ -43,6 +45,7 @@ export const FixedWrapper: React.FC = () => {
   const isTabletOrMobile = useMediaQuery({ query: '(max-width: 546px)' });
 
   // Effector hooks //
+  const browserState = Effector.useStore(BrowserStore.store);
   const eventState = Effector.useStore(EventStore.store);
   const userState = Effector.useStore(UserStore.store);
   const twitterState = Effector.useStore(TwitterStore.store);
@@ -56,17 +59,8 @@ export const FixedWrapper: React.FC = () => {
   const [address, setAddress] = React.useState<string>(userState.zilAddress);
   // State for check is tablet or mobile width.
   const [twitterWidth] = React.useState(isTabletOrMobile ? WIDTH_MOBILE : WIDTH_DEFAULT);
-
-  /**
-   * Validation lastAction for user and current block.
-   */
-  const canCallAction = React.useMemo(() => {
-    if (Number(userState.lastAction) > Number(blockchainState.BlockNum)) {
-      return false;
-    }
-
-    return true;
-  }, [userState, blockchainState]);
+  const [placeholder, setPlaceholder] = React.useState<string>();
+  const [disabledAddress, setDisabledAddress] = React.useState<boolean>();
   /**
    * Calculate the time for next action.
    */
@@ -74,19 +68,19 @@ export const FixedWrapper: React.FC = () => {
     () => timerCalc(
       blockchainState,
       userState,
-      twitterState.tweets,
+      twitterState.lastBlockNumber,
       Number(blockchainState.blocksPerWeek)
     ),
-    [blockchainState, twitterState]
+    [blockchainState, twitterState, userState]
   );
   const timerDay = React.useMemo(
     () => timerCalc(
       blockchainState,
       userState,
-      twitterState.tweets,
+      twitterState.lastBlockNumber,
       Number(blockchainState.blocksPerDay)
     ),
-    [blockchainState, twitterState]
+    [blockchainState, twitterState, userState]
   );
 
   /**
@@ -97,18 +91,20 @@ export const FixedWrapper: React.FC = () => {
     event.preventDefault();
 
     if (!address) {
+      setAddressErr('This field is required.');
+
       return null;
     } else if (!validation.isBech32(address)) {
       setAddressErr('Incorect address format.');
 
       return null;
+    } else if (address === userState.zilAddress) {
+      setAddressErr(`You're already connected with this address`);
+
+      return null;
     }
 
     setAddress(address);
-
-    if (address === userState.zilAddress) {
-      return null;
-    }
 
     // Send to server for validation and update address.
     const result = await UserStore.updateAddress({
@@ -125,7 +121,7 @@ export const FixedWrapper: React.FC = () => {
     }
 
     EventStore.reset();
-  }, [address, validation, setAddressErr, addressErr]);
+  }, [address, validation, setAddressErr, addressErr, userState]);
   /**
    * Handle input address for Input component.
    * @param event HTMLInput event.
@@ -148,8 +144,11 @@ export const FixedWrapper: React.FC = () => {
     EventStore.setEvent(Events.Load);
     const result = await addTweet(userState.jwtToken, eventState.content);
 
-    if (result.message === 'Created') {
-      await TwitterStore.getTweets(null);
+    TwitterStore.setShowTwitterTweetEmbed(false)
+
+    setTimeout(() => TwitterStore.setShowTwitterTweetEmbed(true), SLEEP);
+    if (result.message.includes('Added')) {
+      TwitterStore.add(result.tweet);
 
       NotificationManager.info('Tweet added!');
     }
@@ -158,10 +157,26 @@ export const FixedWrapper: React.FC = () => {
   }, [addTweet, EventStore, userState, eventState, TwitterStore]);
 
   React.useEffect(() => {
-    if (!address || address.length < 1) {
+    if (timerPerWeeks > 0) {
+      setPlaceholder(`You can change address: ${moment(timerPerWeeks).fromNow()}`);
+      setDisabledAddress(true);
+      setAddress('');
+    } else if (userState.synchronization) {
+      setPlaceholder('Waiting for address to sync...');
+      setDisabledAddress(true);
+      setAddress('');
+    } else if (timerPerWeeks === 0 && !userState.synchronization && !address) {
       setAddress(userState.zilAddress);
+      setDisabledAddress(false);
     }
-  }, [address, setAddress, userState]);
+  }, [
+    address,
+    setAddress,
+    userState,
+    setPlaceholder,
+    timerPerWeeks,
+    disabledAddress
+  ]);
   // React hooks //
 
   return (
@@ -170,67 +185,49 @@ export const FixedWrapper: React.FC = () => {
         show={eventState.current === Events.Settings}
         onBlur={() => EventStore.reset()}
       >
-        <Card title="Settings">
-          {timerPerWeeks !== 0 && !userState.synchronization ? (
-            <Text
-              fontColors={FontColors.white}
-              size={FontSize.sm}
-            >
-              You can change address: {moment(timerPerWeeks).fromNow()}
-            </Text>
-          ) : null}
-          {userState.synchronization ? (
-            <Text
-              fontColors={FontColors.white}
-              size={FontSize.sm}
-            >
-              Waiting for address to sync...
-            </Text>
-          ) : null}
-          <form onSubmit={handleAddressChange}>
-            <FieldInput
-              defaultValue={address}
-              sizeVariant={SizeComponent.md}
-              error={addressErr}
-              disabled={!canCallAction || userState.synchronization || timerPerWeeks !== 0}
-              css="font-size: 15px;width: 300px;"
-              onChange={handleChangeAddress}
-            />
-            <Button
-              sizeVariant={SizeComponent.lg}
-              variant={ButtonVariants.primary}
-              disabled={Boolean(!canCallAction || addressErr || !address || (address === userState.zilAddress))}
-              css="margin-top: 10px;"
-            >
-              Change address
-            </Button>
-          </form>
-        </Card>
+        <form onSubmit={handleAddressChange}>
+          <FieldInput
+            defaultValue={address}
+            sizeVariant={SizeComponent.lg}
+            error={addressErr}
+            placeholder={placeholder}
+            disabled={disabledAddress}
+            css="font-size: 15px;width: 300px;"
+            onChange={handleChangeAddress}
+          />
+          <Button
+            sizeVariant={SizeComponent.lg}
+            variant={ButtonVariants.outlet}
+            disabled={Boolean(disabledAddress)}
+            css="margin-top: 10px;"
+          >
+            Change address
+          </Button>
+        </form>
       </Modal>
       <Modal
         show={eventState.current === Events.Twitter}
         onBlur={() => EventStore.reset()}
       >
-        <Card title="Found tweet">
-          {Boolean(eventState.content && eventState.content.id_str) ? (
-            <Container css={`display: grid;width: ${twitterWidth}px`}>
-              <TwitterTweetEmbed
-                screenName={userState.screenName}
-                tweetId={eventState.content.id_str}
-                options={{
-                  width: twitterWidth
-                }}
-              />
-              {timerDay === 0 ? (
-                <Button
-                  sizeVariant={SizeComponent.lg}
-                  variant={ButtonVariants.primary}
-                  css="justify-self: center;margin-top: 30px;"
-                  onClick={handlePay}
-                >
-                  Pay
-                </Button>
-              ) : (
+        {Boolean(eventState.content && eventState.content.id_str) ? (
+          <Container css={`display: grid;width: ${twitterWidth}px`}>
+            <TwitterTweetEmbed
+              screenName={userState.screenName}
+              tweetId={eventState.content.id_str}
+              options={{
+                width: twitterWidth
+              }}
+            />
+            {timerDay === 0 ? (
+              <Button
+                sizeVariant={SizeComponent.lg}
+                variant={ButtonVariants.primary}
+                css="justify-self: center;margin-top: 30px;"
+                onClick={handlePay}
+              >
+                Pay
+              </Button>
+            ) : (
                 <Text
                   size={FontSize.sm}
                   fontVariant={Fonts.AvenirNextLTProDemi}
@@ -239,25 +236,35 @@ export const FixedWrapper: React.FC = () => {
                   You can participate: {moment(timerDay).fromNow()}
                 </Text>
               )}
-            </Container>
-          ) : null}
-        </Card>
+          </Container>
+        ) : null}
       </Modal>
       <Modal
         show={eventState.current === Events.Error}
         onBlur={() => EventStore.reset()}
       >
-        <Card title="Error">
+        <Container css="display: grid;justify-items: center;">
+          <Img
+            src={`/imgs/error.${browserState.format}`}
+            css="width: 200px;height: auto;"
+          />
+          <Text
+            size={FontSize.lg}
+            fontVariant={Fonts.AvenirNextLTProDemi}
+            fontColors={FontColors.white}
+          >
+            Error
+          </Text>
           {Boolean(eventState.content && eventState.content.message) ? <Text
             size={FontSize.sm}
-            fontColors={FontColors.danger}
+            fontColors={FontColors.white}
             fontVariant={Fonts.AvenirNextLTProBold}
             align={Sides.center}
             css="min-width: 300px;"
           >
             {eventState.content.message}
           </Text> : null}
-        </Card>
+        </Container>
       </Modal>
       <ContainerLoader show={eventState.current === Events.Load}>
         <ClipLoader
